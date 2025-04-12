@@ -109,16 +109,99 @@ def extract_osm_data(location, radius):
 
     return buildings, streets
 
-location = "france,paris,La place du Tertre"
-radius = 400
+
+
+
+
+def save_to_obj(mesh,output_path):
+    output_dir=Path(output_path).parent
+    output_dir.mkdir(parents=True,exist_ok=True)
+    print("saving model to {output_path}")
+    mesh.save(output_path)
+    print("export complete")
+
+def streetGraph_to_pyvista(st_graph):
+    # Convert the graph to a dataframe
+    nodes, edges = ox.graph_to_gdfs(st_graph)
+
+    edges = edges.dropna(subset=['geometry'])
+
+    # Convert geometries to 3D points (z = 0)
+    pts_list = edges['geometry'].apply(lambda g: np.column_stack(
+        (g.xy[0], g.xy[1], np.zeros(len(g.xy[0])))
+    )).tolist()
+
+   
+
+   
+    vertices = np.concatenate(pts_list)
+
+    lines = []  # Create an empty array with 3 columns
+
+    j = 0
+
+    for i in range(len(pts_list)):
+        pts = pts_list[i]
+        vertex_length = len(pts)
+        vertex_start = j
+        vertex_end = j + vertex_length - 1
+        vertex_arr = [vertex_length] \
+            + list(range(vertex_start, vertex_end + 1))
+        lines.append(vertex_arr)
+        j += vertex_length
+    print("done")
+    return pv.PolyData(vertices, lines=np.hstack(lines))
+ 
+def cloudgify(location, mesh, street_mesh, file_path):
+    pl = pv.Plotter(off_screen=True, image_scale=1)
+    pl.background_color = 'k'
+    actor = pl.add_text(
+        location,
+        position='upper_left',
+        color='lightgrey',
+        shadow=True,
+        font_size=26,
+    )
+
+    pl.add_mesh(mesh, scalars=mesh['color'], cmap="tab20", show_edges=False)
+    pl.add_mesh(street_mesh)
+    pl.remove_scalar_bar()
+    # pl.background_color = 'k'
+    # pl.enable_eye_dome_lighting()
+    pl.show(auto_close=False)
+
+    viewup = [0, 0, 1]
+
+    # Create output directory if it doesn't exist
+    output_dir = Path(file_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    path = pl.generate_orbital_path(n_points=40, shift=mesh.length, viewup=viewup, factor=3.0)
+    pl.open_gif(output_dir/"model.gif")
+    pl.orbit_on_path(path, write_frames=True, viewup=viewup)
+    pl.close()
+
+    print("Export of GIF successful")
+    return
+
+#main
+#%% 8. Single Location Experiment
+location = "Aachen, Germany"
+radius = 500
 
 buildings, streets = extract_osm_data(location, radius)
 footprints = generate_footprints(buildings)
 mesh, bd_instances = extrude_buildings(footprints)
-
+street_mesh = streetGraph_to_pyvista(streets)
 pl = pv.Plotter(border=False)
 pl.add_mesh(mesh, scalars=mesh['color'], cmap="tab20", show_edges=False)
 pl.remove_scalar_bar()
 pl.show(title='(c) Florent Poux - 3D Tech')
 
-print(buildings)
+output_dir = "output/" + location.split(",")[0]
+cloudgify(location, mesh, street_mesh, output_dir)
+
+output_file = output_dir + "/buildings.obj"
+output_streets = output_dir + "/streets.obj"
+save_to_obj(mesh, output_file)
+save_to_obj(street_mesh, output_streets)

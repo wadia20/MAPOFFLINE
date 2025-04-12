@@ -1,0 +1,10 @@
+import osmnx as ox
+
+# Define the center point (latitude, longitude)
+center_point = (31.6295, -7.9811)  # Marrakesh center
+
+# Download the graph within 500 meters around that point
+G = ox.graph_from_point(center_point, dist=5000, network_type="drive")
+ox.plot_graph(G)
+
+ox.save_graphml(G, filepath="ALLmarrakesh.graphml")
